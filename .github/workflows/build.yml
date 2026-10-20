@@ -1,0 +1,36 @@
+name: Build iOS from zip
+on:
+  push:
+    paths: ['**.zip', '.github/workflows/build.yml']
+  workflow_dispatch:
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Unzip
+        run: |
+          ZIP=$(ls -t *.zip | head -1)
+          echo "Using $ZIP"
+          mkdir -p src && unzip -q -o "$ZIP" -d src
+          PY=$(find src -name project.yml | head -1)
+          echo "PROJ_DIR=$(dirname "$PY")" >> $GITHUB_ENV
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Build unsigned IPA
+        working-directory: ${{ env.PROJ_DIR }}
+        run: |
+          xcodegen generate
+          PROJ=$(ls -d *.xcodeproj | head -1)
+          NAME="${PROJ%.xcodeproj}"
+          xcodebuild -project "$PROJ" -scheme "$NAME" -configuration Release \
+            -sdk iphoneos -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO build
+          mkdir Payload
+          cp -R build/Build/Products/Release-iphoneos/"$NAME".app Payload/
+          zip -qr "$NAME.ipa" Payload
+          echo "IPA=$PWD/$NAME.ipa" >> $GITHUB_ENV
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ipa
+          path: ${{ env.IPA }}
