@@ -1,0 +1,25 @@
+name: Build iOS
+on:
+  push: {branches: [main]}
+  workflow_dispatch: {}
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - id: chk
+        name: Kiểm tra đủ 2 phần zip
+        run: |
+          if [ "$(ls VillageBuilder_part*.zip 2>/dev/null | wc -l)" -ge 2 ]; then echo "ok=true" >> "$GITHUB_OUTPUT"; else echo "Chưa đủ 2 file VillageBuilder_part*.zip, bỏ qua."; fi
+      - if: steps.chk.outputs.ok == 'true'
+        name: Tự giải nén
+        run: for z in VillageBuilder_part*.zip; do unzip -oq "$z"; done
+      - if: steps.chk.outputs.ok == 'true'
+        run: brew install xcodegen && xcodegen generate
+      - if: steps.chk.outputs.ok == 'true'
+        run: |
+          xcodebuild -project VillageBuilder.xcodeproj -scheme VillageBuilder -configuration Release -sdk iphoneos -derivedDataPath build CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" build
+          mkdir Payload && cp -R build/Build/Products/Release-iphoneos/VillageBuilder.app Payload/ && zip -qr VillageBuilder.ipa Payload
+      - if: steps.chk.outputs.ok == 'true'
+        uses: actions/upload-artifact@v4
+        with: {name: VillageBuilder-ipa, path: VillageBuilder.ipa}
